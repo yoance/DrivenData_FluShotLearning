@@ -136,6 +136,17 @@ auc
 
 
 ```{r}
-predict_a = predict(nb_a, type="raw", newdata=test_features)
+predict_a = predict(nb_a, type="raw", newdata=test_features)[,2]
+predict_b = predict(nb_b, type="raw", newdata=test_features)[,2]
 ```
 
+```{r}
+submission <- cbind("respondent_id"=test_features$respondent_id,
+                    "h1n1_vaccine"=predict_a,
+                    "seasonal_vaccine"=predict_b)
+head(submission)
+```
+
+```{r}
+write.csv(submission,"C:\\Users\\chand\\OneDrive - Universitas Pelita Harapan\\Kuliah\\Semester 9\\Capstone\\Project 1 - Flu Shot Learning\\submission.csv", row.names = FALSE)
+```
