@@ -1,0 +1,141 @@
+---
+title: 'Flu Shot Learning: Predict H1N1 and Seasonal Flu Vaccines'
+author: "Caroline, Clarisa, Yohan"
+date: "5/23/2022"
+output:
+  html_document:
+    code_folding: show
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Latar Belakang
+# Tinjauan Pustaka
+# Metodologi
+# Hasil dan Pembahasan
+
+# Data Loading
+```{r}
+train_labels <- read.csv("training_set_labels.csv")
+train_features <- read.csv("training_set_features.csv")
+test_features <- read.csv("test_set_features.csv")
+```
+
+```{r}
+head(train_labels)
+head(train_features)
+head(test_features)
+```
+
+
+```{r}
+# Menggabungkan Training Labels dan Features
+train <- merge(train_labels, train_features, by="respondent_id")
+head(train)
+```
+
+# Data Cleaning
+```{r}
+# Mengecek missing values.
+sapply(train, function(x) sum(is.na(x)))
+```
+
+```{r}
+sapply(test_features, function(x) sum(is.na(x)))
+```
+
+```{r}
+train[, names(train)!="respondent_id"] = lapply(train[, names(train)!="respondent_id"], factor)
+```
+
+```{r}
+test_features[, names(test_features)!="respondent_id"] = lapply(test_features[, names(test_features)!="respondent_id"], factor)
+```
+
+
+
+# Analisa Variabel Independen
+```{r}
+table(train$h1n1_concern)
+```
+
+# Train-Test Split pada Train Set
+Akan dilakukan pemisahan Train-Test pada data training yang diberikan untuk melakukan validasi lokal. Rasio Train-Test sebesar 80:20 dengan menerapkan stratified random sampling terhadap independent variable. Proses ini dilakukan untuk dua kasus, yaitu untuk pemodelan model untuk (a) h1n1_vaccine, dan (b) seasonal vaccine.
+
+```{r}
+library(caret)
+```
+
+```{r}
+set.seed(1)
+train_idx_a <- createDataPartition(y=train$h1n1_vaccine, p=0.8, list=F)
+train_idx_b <- createDataPartition(y=train$seasonal_vaccine, p=0.8, list=F)
+
+train_a <- train[train_idx_a, !names(train) %in% c("respondent_id", "seasonal_vaccine")]
+test_a <- train[-train_idx_a, !names(train) %in% c("respondent_id", "seasonal_vaccine")]
+
+train_b <- train[train_idx_b, !names(train) %in% c("respondent_id", "h1n1_vaccine")]
+test_b <- train[-train_idx_b, !names(train) %in% c("respondent_id", "h1n1_vaccine")]
+```
+
+# Model
+
+## Naive Bayes
+```{r}
+library(e1071)
+library(ROCR) # For Plotting ROC Curve and Calculating AUC
+```
+
+### Model A
+```{r}
+options = trainControl(method="repeatedCV", number=10) # 10-fold cross validation utk akurasi
+nb_a = naiveBayes(train_a, train_a$h1n1_vaccine, laplace=1, trControl=options, tuneLength=7)
+```
+
+```{r}
+nbFitted_a = predict(nb_a, type="class", newdata=train_a)
+confusionMatrix(nbFitted_a, train_a$h1n1_vaccine, positive="1")
+```
+
+```{r}
+nbPredict_a = predict(nb_a, type="class", newdata=test_a)
+confusionMatrix(nbPredict_a, test_a$h1n1_vaccine, positive="1")
+```
+
+### Model B
+```{r}
+nb_b = naiveBayes(train_b, train_b$seasonal_vaccine, laplace=1, trControl=options, tuneLength=7)
+```
+
+```{r}
+nbFitted_b = predict(nb_b, type="class", newdata=train_b)
+confusionMatrix(nbFitted_b, train_b$seasonal_vaccine, positive="1")
+```
+
+```{r}
+nbPredict_b = predict(nb_b, type="class", newdata=test_b)
+confusionMatrix(nbPredict_b, test_b$seasonal_vaccine, positive="1")
+```
+
+```{r}
+# ROC-AUC Curve
+ROCPred <- prediction(nbPredict_b, test_b$seasonal_vaccine) 
+ROCPer <- performance(ROCPred, measure = "tpr", x.measure = "fpr")
+
+auc <- performance(ROCPred, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+
+```{r}
+predict_a = predict(nb_a, type="raw", newdata=test_features)
+```
+
