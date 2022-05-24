@@ -43,14 +43,22 @@ head(train)
 
 # Data Cleaning
 ```{r}
-# Mengecek missing values.
-sapply(train, function(x) sum(is.na(x)))
+# Mengecek proporsi missing values setiap kolom.
+data.frame("NA"=sapply(train, 
+                       function(x) sum(is.na(x)))/dim(train)[1])
 ```
 
 ```{r}
-sapply(test_features, function(x) sum(is.na(x)))
+data.frame("NA"=sapply(test_features, 
+                       function(x) sum(is.na(x))/dim(test_features)[1]))
 ```
+Variabel `health_insurance` memiliki proporsi missing values yang secara relatif besar di train dan test set.
 
+## Variabel `health_insurance`
+
+
+
+## Mengubah Categorical Variable
 ```{r}
 train[, names(train)!="respondent_id"] = lapply(train[, names(train)!="respondent_id"], factor)
 ```
@@ -126,12 +134,23 @@ confusionMatrix(nbPredict_b, test_b$seasonal_vaccine, positive="1")
 
 ```{r}
 # ROC-AUC Curve
-ROCPred <- prediction(nbPredict_b, test_b$seasonal_vaccine) 
+ROCPred <- prediction(as.numeric(nbPredict_b), as.numeric(test_b$seasonal_vaccine))
 ROCPer <- performance(ROCPred, measure = "tpr", x.measure = "fpr")
 
 auc <- performance(ROCPred, measure = "auc")
 auc <- auc@y.values[[1]]
 auc
+```
+
+```{r}
+# Plotting the ROC Curve
+plot(ROCPer, colorize = TRUE, 
+     print.cutoffs.at = seq(0.1, by = 0.1), 
+     main = "ROC CURVE")
+abline(a = 0, b = 1)
+
+auc <- round(auc, 4)
+legend(.6, .4, auc, title = "AUC", cex = 1)
 ```
 
 
