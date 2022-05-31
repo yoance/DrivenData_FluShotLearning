@@ -16,10 +16,12 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-# Latar Belakang
-# Tinjauan Pustaka
-# Metodologi
-# Hasil dan Pembahasan
+
+```{r}
+library(dplyr)
+library(tictoc)
+```
+
 
 # Data Loading
 ```{r}
@@ -41,38 +43,96 @@ train <- merge(train_labels, train_features, by="respondent_id")
 head(train)
 ```
 
+```{r}
+# Mengubah respondent_id menjadi index setiap entry
+rownames(train) <- train$respondent_id
+rownames(test_features) <- test_features$respondent_id
+
+# Menghapus respondent_id
+train = train[,-1]
+test = test_features[,-1]
+```
+
+
 # Data Cleaning
 ```{r}
 # Mengecek proporsi missing values setiap kolom.
-data.frame("NA"=sapply(train, 
-                       function(x) sum(is.na(x)))/dim(train)[1])
+dfmissing_train = data.frame("NA"=sapply(train, 
+                                        function(x) sum(is.na(x))/dim(train)[1]))
+arrange(dfmissing_train, desc(NA.))
 ```
 
 ```{r}
-data.frame("NA"=sapply(test_features, 
-                       function(x) sum(is.na(x))/dim(test_features)[1]))
+dfmissing_test = data.frame("NA"=sapply(test, 
+                                        function(x) sum(is.na(x))/dim(test)[1]))
+arrange(dfmissing_test, desc(NA.))
 ```
+
 Variabel `health_insurance` memiliki proporsi missing values yang secara relatif besar di train dan test set.
 
-## Variabel `health_insurance`
 
+## Imputasi Variabel `health_insurance`
+
+Dikarenakan variabel `health_insurance` memiliki proporsi missing values yang besar, akan diimputasikan sebuah nilai "-1" untuk missing values, yang mana `health_insurance` merupakan variabel biner.
+```{r}
+train$health_insurance[is.na(train$health_insurance)] = -1
+test$health_insurance[is.na(test$health_insurance)] = -1
+```
+
+```{r}
+# Pengecekan Missing Value setelah Imputasi
+test$health_insurance[is.na(test$health_insurance)] = -1
+c("Train Missing Value" = sum(is.na(train$health_insurance)),
+  "Test Missing Value" = sum(is.na(test$health_insurance)))
+```
+
+## Imputasi Variabel Dependen Lainnya
+```{r}
+missing_train = colnames(train)[colSums(is.na(train)) > 0]
+missing_test = colnames(test)[colSums(is.na(test)) > 0]
+ifelse(sum(missing_train==missing_test)==length(missing_train), 
+       print("Same Columns w/ Missing Values"),
+       print("Different Columns w/ Missing Values"))
+```
+
+```{r}
+for(missing in missing_test){
+  col = which(colnames(train)==missing)
+  train[is.na(train[, col]), col] = median(train[, col], na.rm=T)
+  
+  col = which(colnames(test)==missing)
+  test[is.na(test[, col]), col] = median(test[, col], na.rm=T)
+}
+```
 
 
 ## Mengubah Categorical Variable
 ```{r}
-train[, names(train)!="respondent_id"] = lapply(train[, names(train)!="respondent_id"], factor)
-```
+train[, 1:ncol(train)] = lapply(train[, 1:ncol(train)], factor)
+test[, 1:ncol(test)] = lapply(test[, 1:ncol(test)], factor)
 
-```{r}
-test_features[, names(test_features)!="respondent_id"] = lapply(test_features[, names(test_features)!="respondent_id"], factor)
+(categorical = names(test))
 ```
-
 
 
 # Analisa Variabel Independen
 ```{r}
-table(train$h1n1_concern)
+library(ggplot2)
 ```
+
+
+```{r out.width=c('25%', '25%', '25%', '25%'), fig.show='hold'}
+lapply(categorical, 
+       function(x) ggplot(train, aes(h1n1_vaccine, ..count..)) 
+       + geom_bar(aes_string(fill=x), position="dodge"))
+```
+
+```{r out.width=c('25%', '25%', '25%', '25%'), fig.show='hold'}
+lapply(categorical, 
+       function(x) ggplot(train, aes(seasonal_vaccine, ..count..)) 
+       + geom_bar(aes_string(fill=x), position="dodge"))
+```
+
 
 # Train-Test Split pada Train Set
 Akan dilakukan pemisahan Train-Test pada data training yang diberikan untuk melakukan validasi lokal. Rasio Train-Test sebesar 80:20 dengan menerapkan stratified random sampling terhadap independent variable. Proses ini dilakukan untuk dua kasus, yaitu untuk pemodelan model untuk (a) h1n1_vaccine, dan (b) seasonal vaccine.
@@ -86,18 +146,45 @@ set.seed(1)
 train_idx_a <- createDataPartition(y=train$h1n1_vaccine, p=0.8, list=F)
 train_idx_b <- createDataPartition(y=train$seasonal_vaccine, p=0.8, list=F)
 
-train_a <- train[train_idx_a, !names(train) %in% c("respondent_id", "seasonal_vaccine")]
-test_a <- train[-train_idx_a, !names(train) %in% c("respondent_id", "seasonal_vaccine")]
+train_a <- train[train_idx_a, !names(train) %in% c("seasonal_vaccine")]
+test_a <- train[-train_idx_a, !names(train) %in% c("seasonal_vaccine")]
 
-train_b <- train[train_idx_b, !names(train) %in% c("respondent_id", "h1n1_vaccine")]
-test_b <- train[-train_idx_b, !names(train) %in% c("respondent_id", "h1n1_vaccine")]
+train_b <- train[train_idx_b, !names(train) %in% c("h1n1_vaccine")]
+test_b <- train[-train_idx_b, !names(train) %in% c("h1n1_vaccine")]
 ```
+
 
 # Model
 
+Akan dibuat fungsi untuk mengevaluasi model secara lokal dengan metrik ROC-AUC. AUC yang akan diambil adalah rataan AUC dari 2 variabel target.
+```{r}
+roc_auc <- function(pred_a, pred_b){
+  obs_a = test_a$h1n1_vaccine
+  obs_b = test_b$seasonal_vaccine
+  
+  ROCPred_a <- prediction(as.numeric(pred_a), as.numeric(obs_a))
+  auc_a <- performance(ROCPred_a, measure = "auc")
+  auc_a <- auc_a@y.values[[1]]
+  
+  ROCPred_b <- prediction(as.numeric(pred_b), as.numeric(obs_b))
+  auc_b <- performance(ROCPred_b, measure = "auc")
+  auc_b <- auc_b@y.values[[1]]
+  
+  # # Plotting ROC Curve
+  # ROCPer <- performance(ROCPred, measure = "tpr", x.measure = "fpr")
+  # plot(ROCPer, colorize = TRUE, 
+  #      print.cutoffs.at = seq(0.1, by = 0.1), 
+  #      main = "ROC CURVE")
+  # abline(a = 0, b = 1)
+  # legend(.6, .4, round(auc, 4), title = "AUC", cex = 1)
+  
+  return(mean(c(auc_a, auc_b)))
+}
+```
+
 ## Naive Bayes
 ```{r}
-library(e1071)
+library(e1071) # Naive Bayes
 library(ROCR) # For Plotting ROC Curve and Calculating AUC
 ```
 
@@ -132,40 +219,288 @@ nbPredict_b = predict(nb_b, type="class", newdata=test_b)
 confusionMatrix(nbPredict_b, test_b$seasonal_vaccine, positive="1")
 ```
 
-```{r}
-# ROC-AUC Curve
-ROCPred <- prediction(as.numeric(nbPredict_b), as.numeric(test_b$seasonal_vaccine))
-ROCPer <- performance(ROCPred, measure = "tpr", x.measure = "fpr")
 
-auc <- performance(ROCPred, measure = "auc")
-auc <- auc@y.values[[1]]
-auc
+### Prediction
+
+```{r}
+# Evaluasi AUC secara lokal
+(nbAUC = roc_auc(nbPredict_a, nbPredict_b))
 ```
 
 ```{r}
-# Plotting the ROC Curve
-plot(ROCPer, colorize = TRUE, 
-     print.cutoffs.at = seq(0.1, by = 0.1), 
-     main = "ROC CURVE")
-abline(a = 0, b = 1)
-
-auc <- round(auc, 4)
-legend(.6, .4, auc, title = "AUC", cex = 1)
-```
-
-
-```{r}
-predict_a = predict(nb_a, type="raw", newdata=test_features)[,2]
-predict_b = predict(nb_b, type="raw", newdata=test_features)[,2]
+predict_a = predict(nb_a, type="raw", newdata=test)[,2]
+predict_b = predict(nb_b, type="raw", newdata=test)[,2]
 ```
 
 ```{r}
-submission <- cbind("respondent_id"=test_features$respondent_id,
+submission <- cbind("respondent_id"=as.numeric(rownames(test)),
                     "h1n1_vaccine"=predict_a,
                     "seasonal_vaccine"=predict_b)
 head(submission)
 ```
 
 ```{r}
-write.csv(submission,"C:\\Users\\chand\\OneDrive - Universitas Pelita Harapan\\Kuliah\\Semester 9\\Capstone\\Project 1 - Flu Shot Learning\\submission.csv", row.names = FALSE)
+write.csv(submission,"submission.csv", row.names = FALSE)
 ```
+
+
+## Logistic Regression
+
+### Model A
+```{r}
+logr_a = glm(h1n1_vaccine ~ ., family = "binomial", data = train_a)
+```
+
+```{r}
+logrPredict_a = predict(logr_a, type="response", newdata=test_a)
+logrPredict_a = ifelse(logrPredict_a > 0.5, 1, 0)
+```
+
+### Model B
+```{r}
+logr_b = glm(seasonal_vaccine ~ ., family = "binomial", data = train_b)
+```
+
+```{r}
+logrPredict_b = predict(logr_b, type="response", newdata=test_b)
+logrPredict_b = ifelse(logrPredict_b > 0.5, 1, 0)
+```
+
+
+### Prediction
+
+```{r}
+# Evaluasi AUC secara lokal
+(logrAUC = roc_auc(logrPredict_a, logrPredict_b))
+```
+
+```{r}
+predict_a = predict(logr_a, type="response", newdata=test)
+predict_b = predict(logr_b, type="response", newdata=test)
+```
+
+```{r}
+submission <- cbind("respondent_id"=as.numeric(rownames(test)),
+                    "h1n1_vaccine"=predict_a,
+                    "seasonal_vaccine"=predict_b)
+head(submission)
+```
+
+```{r}
+write.csv(submission,"submission.csv", row.names = FALSE)
+```
+
+
+## GBM
+```{r}
+library(gbm)
+```
+
+Akan dilakukan 10-fold cross validation untuk mendapatkan parameter optimal `n.trees` dan `interaction.depth`.
+```{r}
+set.seed(1)
+n.folds <- 10
+folds_a <- createFolds(y=train_a$h1n1_vaccine, k=n.folds, list=T, returnTrain=F)
+folds_b <- createFolds(y=train_b$seasonal_vaccine, k=n.folds, list=T, returnTrain=F)
+```
+
+```{r}
+try_ntrees = c(200, 300, 400, 500)
+try_depths = c(13, 15, 17, 19)
+```
+
+Perlu diubah juga target variable ke dalam bentuk numerik untuk gbm dengan distribusi Bernoulli di R.
+```
+train_a$h1n1_vaccine = factor(train_a$h1n1_vaccine)
+test_a$h1n1_vaccine = factor(test_a$h1n1_vaccine)
+
+train_b$seasonal_vaccine = factor(train_b$seasonal_vaccine)
+test_b$seasonal_vaccine = factor(test_b$seasonal_vaccine)
+```
+
+```{r}
+trainTemp_a <- train_a$h1n1_vaccine
+testTemp_a <- test_a$h1n1_vaccine
+
+trainTemp_b <- train_b$seasonal_vaccine
+testTemp_b <- test_b$seasonal_vaccine
+
+# Changing Factor Levels to Numeric for Bernoulli GBM
+train_a$h1n1_vaccine <- as.numeric(trainTemp_a)-1
+test_a$h1n1_vaccine <- as.numeric(testTemp_a)-1
+
+train_b$seasonal_vaccine <- as.numeric(trainTemp_b)-1
+test_b$seasonal_vaccine <- as.numeric(testTemp_b)-1
+```
+
+
+### Cross Validation
+```{r}
+cv_AUC_a <- NULL
+cv_AUC_a <- matrix(nrow = length(try_ntrees), ncol = length(try_depths))
+rownames(cv_AUC_a) = try_ntrees
+colnames(cv_AUC_a) = try_depths
+```
+
+```{r}
+# Note: this code will not be run for knitting purposes
+# Results are presented in the next chunk
+tic("GBM_A CV")
+for (n in try_ntrees){
+  AUC.ave <- NULL;
+    for (d in try_depths){
+    AUC <- NULL; i=1
+    for(fold in folds_a){
+      print(paste(n,d,i)); i=i+1
+      ## GBM
+      set.seed(1)
+      mod = gbm(h1n1_vaccine~., data=train_a[-fold, ],
+                n.trees=n, interaction.depth=d, 
+                n.minobsinnode=10, shrinkage=0.1, 
+                distribution="bernoulli", verbose=F)
+      
+      ## Predicting in the validation set
+      pred = predict(mod, newdata=train_a[fold, ], type="response")
+      # print(sum(is.na(pred)))
+      pred = factor(ifelse(pred>0.5, 1, 0))
+      
+      
+      ## AUC
+      obs = train_a[fold, ]$h1n1_vaccine
+      ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
+      auc <- performance(ROCPred, measure = "auc")
+      auc <- auc@y.values[[1]]
+      
+      AUC = c(AUC, auc)
+      
+      ## Freeing Memory
+      rm(mod); gc()
+    }
+    print(mean(AUC))
+    AUC.ave = c(AUC.ave, mean(AUC));
+    }
+  cv_AUC_a[paste(n), ] = AUC.ave
+  print(cv_AUC_a[paste(n), ])
+}
+toc()
+```
+
+```{r}
+cv_AUC_b <- NULL
+cv_AUC_b <- matrix(nrow = length(try_ntrees), ncol = length(try_depths))
+rownames(cv_AUC_b) = try_ntrees
+colnames(cv_AUC_b) = try_depths
+```
+
+```{r}
+# Note: this code will not be run for knitting purposes
+# Results are presented in the next chunk
+tic("GBM_B CV")
+for (n in try_ntrees){
+  AUC.ave <- NULL;
+    for (d in try_depths){
+    AUC <- NULL; i=1
+    for(fold in folds_b){
+      print(paste(n,d,i)); i=i+1
+      ## GBM
+      set.seed(1)
+      mod = gbm(seasonal_vaccine~., data=train_b[-fold, ],
+                n.trees=n, interaction.depth=d, 
+                n.minobsinnode=10, shrinkage=0.1, 
+                distribution="bernoulli", verbose=F)
+      
+      ## Predicting in the validation set
+      pred = predict(mod, newdata=train_b[fold, ], type="response")
+      # print(sum(is.na(pred)))
+      pred = factor(ifelse(pred>0.5, 1, 0))
+      
+      
+      ## AUC
+      obs = train_b[fold, ]$seasonal_vaccine
+      ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
+      auc <- performance(ROCPred, measure = "auc")
+      auc <- auc@y.values[[1]]
+      
+      AUC = c(AUC, auc)
+      
+      ## Freeing Memory
+      rm(mod); gc()
+    }
+    print(mean(AUC))
+    AUC.ave = c(AUC.ave, mean(AUC));
+    }
+  cv_AUC_b[paste(n), ] = AUC.ave
+  print(cv_AUC_b[paste(n), ])
+}
+toc()
+```
+
+```{r}
+# Hasil Cross Validation ~ time elapsed: 134.2198 mins
+cv_AUC_a["200", ] <- c(0.7256943,0.7232104,0.7292098,0.7298531)
+cv_AUC_a["300", ] <- c(0.7242295,0.7251421,0.7272973,0.7264040)
+cv_AUC_a["400", ] <- c(0.7256769,0.7241143,0.7282537,0.7251630)
+cv_AUC_a["500", ] <- c(0.7257977,0.7230794,0.7247524,0.7247978)
+
+cv_AUC_a = melt(cv_AUC_a)
+cv_AUC_a$Var1 = as.factor(cv_AUC_a$Var1)
+cv_AUC_a$Var2 = as.factor(cv_AUC_a$Var2)
+
+
+# Hasil Cross Validation ~ time elapsed: 133.889 mins
+cv_bUC_b["200", ] <- c(0.7819641,0.7817813,0.7806479,0.7821662)
+cv_bUC_b["300", ] <- c(0.7798539,0.7793906,0.7779966,0.7806469)
+cv_bUC_b["400", ] <- c(0.7791761,0.7770935,0.7748652,0.7767404)
+cv_bUC_b["500", ] <- c(0.7785981,0.7735031,0.7735920,0.7757869)
+
+cv_bUC_b = melt(cv_bUC_b)
+cv_bUC_b$Var1 = as.factor(cv_bUC_b$Var1)
+cv_bUC_b$Var2 = as.factor(cv_bUC_b$Var2)
+```
+
+
+### Model A
+```{r}
+gbm_a = glm(h1n1_vaccine ~ ., family = "binomial", data = train_a)
+```
+
+```{r}
+gbmPredict_a = predict(gbm_a, type="response", newdata=test_a)
+gbmPredict_a = ifelse(gbmPredict_a > 0.5, 1, 0)
+```
+
+### Model B
+```{r}
+gbm_b = glm(seasonal_vaccine ~ ., family = "binomial", data = train_b)
+```
+
+```{r}
+gbmPredict_b = predict(gbm_b, type="response", newdata=test_b)
+gbmPredict_b = ifelse(gbmPredict_b > 0.5, 1, 0)
+```
+
+
+### Prediction
+
+```{r}
+# Evaluasi AUC secara lokal
+(gbmAUC = roc_auc(gbmPredict_a, gbmPredict_b))
+```
+
+```{r}
+predict_a = predict(gbm_a, type="response", newdata=test)
+predict_b = predict(gbm_b, type="response", newdata=test)
+```
+
+```{r}
+submission <- cbind("respondent_id"=as.numeric(rownames(test)),
+                    "h1n1_vaccine"=predict_a,
+                    "seasonal_vaccine"=predict_b)
+head(submission)
+```
+
+```{r}
+write.csv(submission,"submission_gbm.csv", row.names = FALSE)
+```
+
+
