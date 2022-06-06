@@ -3,14 +3,14 @@ title: 'Flu Shot Learning: Predict H1N1 and Seasonal Flu Vaccines'
 author: "Caroline Gunawan, Clarisa Angeline, Yohan Chandrasukmana"
 date: "5/23/2022"
 output:
-  pdf_document:
-    number_sections: yes
-    toc: yes
   html_document:
     code_folding: show
     number_sections: yes
     toc: yes
     toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -22,8 +22,8 @@ library(dplyr)
 library(tictoc)
 ```
 
-
 # Data Loading
+
 ```{r}
 train_labels <- read.csv("training_set_labels.csv")
 train_features <- read.csv("training_set_features.csv")
@@ -35,7 +35,6 @@ head(train_labels)
 head(train_features)
 head(test_features)
 ```
-
 
 ```{r}
 # Menggabungkan Training Labels dan Features
@@ -53,8 +52,8 @@ train = train[,-1]
 test = test_features[,-1]
 ```
 
-
 # Data Cleaning
+
 ```{r}
 # Mengecek proporsi missing values setiap kolom.
 dfmissing_train = data.frame("NA"=sapply(train, 
@@ -70,10 +69,10 @@ arrange(dfmissing_test, desc(NA.))
 
 Variabel `health_insurance` memiliki proporsi missing values yang secara relatif besar di train dan test set.
 
-
 ## Imputasi Variabel `health_insurance`
 
 Dikarenakan variabel `health_insurance` memiliki proporsi missing values yang besar, akan diimputasikan sebuah nilai "-1" untuk missing values, yang mana `health_insurance` merupakan variabel biner.
+
 ```{r}
 train$health_insurance[is.na(train$health_insurance)] = -1
 test$health_insurance[is.na(test$health_insurance)] = -1
@@ -87,6 +86,7 @@ c("Train Missing Value" = sum(is.na(train$health_insurance)),
 ```
 
 ## Imputasi Variabel Dependen Lainnya
+
 ```{r}
 missing_train = colnames(train)[colSums(is.na(train)) > 0]
 missing_test = colnames(test)[colSums(is.na(test)) > 0]
@@ -104,7 +104,6 @@ for(missing in missing_test){
   test[is.na(test[, col]), col] = median(test[, col], na.rm=T)
 }
 ```
-
 
 ## Type-casting Variabel Independen
 
@@ -146,8 +145,8 @@ test[, categorical] = lapply(test[, categorical], factor)
 numerical = names(test[, !names(test)%in%c(categorical,binary)])
 ```
 
-
 # Analisa Variabel Independen
+
 ```{r}
 library(ggplot2) # Plotting
 
@@ -215,6 +214,8 @@ for(var in numerical){
 cors
 ```
 
+Variabel dengan nilai korelasi terhadap dependen variabel yang lebih kecil dari 0.05
+
 ```{r}
 removeVar_a = c('opinion_seas_sick_from_vacc','household_adults','household_children','employment_occupation')
 removeVar_b = c('opinion_h1n1_sick_from_vacc','employment_occupation')
@@ -228,6 +229,7 @@ test_b = test[, !names(test)%in%c("h1n1_vaccine", removeVar_b)]
 ```
 
 # Train-Test Split pada Train Set
+
 Akan dilakukan pemisahan Train-Test pada data training yang diberikan untuk melakukan validasi lokal. Rasio Train-Test sebesar 80:20 dengan menerapkan stratified random sampling terhadap independent variable. Proses ini dilakukan untuk dua kasus, yaitu untuk pemodelan model untuk (a) h1n1_vaccine, dan (b) seasonal vaccine.
 
 ```{r}
@@ -246,12 +248,12 @@ train_b <- train_b[train_idx_b,]
 testloc_b <- train_b[-train_idx_b,]
 ```
 
-
 # Model
 
 Akan dibuat fungsi untuk mengevaluasi model secara lokal dengan metrik ROC-AUC. AUC yang akan diambil adalah rataan AUC dari 2 variabel target.
+
 ```{r}
-library(ROCR) # Plotting ROC Curve and Calculating AUC
+library(ROCR) # Kalkulasi AUC
 
 roc_auc <- function(pred_a, pred_b){
   obs_a = testloc_a$h1n1_vaccine
@@ -268,15 +270,14 @@ roc_auc <- function(pred_a, pred_b){
 }
 ```
 
-
 ## Logistic Regression
 
 ```{r}
 library(car) # VIF
 ```
 
-
 ### Model A
+
 ```{r}
 logr_a = glm(h1n1_vaccine ~ ., family = "binomial", data = train_a)
 summary(logr_a)
@@ -289,6 +290,7 @@ logrPredict_a = ifelse(logrPredict_a > 0.5, 1, 0)
 ```
 
 ### Model B
+
 ```{r}
 logr_b = glm(seasonal_vaccine ~ ., family = "binomial", data = train_b)
 summary(logr_b)
@@ -320,34 +322,38 @@ head(submission)
 ```
 
 ```{r}
-write.csv(submission,"submission_logr.csv", row.names = FALSE)
+# write.csv(submission,"submission_logr.csv", row.names = FALSE)
 ```
 
-
 ## Naive Bayes
+
 ```{r}
 library(e1071) # Pemodelan Naive Bayes
+options = trainControl(method="repeatedCV", number=10) # 10-fold cross validation utk akurasi
 ```
 
 ### Model A
+
 ```{r}
-options = trainControl(method="repeatedCV", number=10) # 10-fold cross validation utk akurasi
 nb_a = naiveBayes(train_a, train_a$h1n1_vaccine, laplace=1, trControl=options, tuneLength=7)
+nb_a
 ```
+
 
 ```{r}
 nbPredict_a = predict(nb_a, type="class", newdata=testloc_a)
 ```
 
 ### Model B
+
 ```{r}
 nb_b = naiveBayes(train_b, train_b$seasonal_vaccine, laplace=1, trControl=options, tuneLength=7)
+nb_b
 ```
 
 ```{r}
 nbPredict_b = predict(nb_b, type="class", newdata=testloc_b)
 ```
-
 
 ### Prediction
 
@@ -369,18 +375,19 @@ head(submission)
 ```
 
 ```{r}
-write.csv(submission,"submission_nb.csv", row.names = FALSE)
+# write.csv(submission,"submission_nb.csv", row.names = FALSE)
 ```
-
 
 ## GBM
 
 Catatan: perlu diubah target variable ke dalam bentuk numerik untuk gbm dengan distribusi Bernoulli di R.
+
 ```{r}
 library(gbm)
 ```
 
 Akan dilakukan 10-fold cross validation untuk mendapatkan parameter optimal `n.trees` dan `interaction.depth`.
+
 ```{r}
 set.seed(1)
 n.folds <- 10
@@ -393,104 +400,99 @@ try_ntrees = c(100, 150, 200, 250)
 try_depths = c(11, 13, 15, 17)
 ```
 
-
 ### Cross Validation
+
 ```{r}
 cv_AUC_a <- NULL
 cv_AUC_a <- matrix(nrow = length(try_ntrees), ncol = length(try_depths))
 rownames(cv_AUC_a) = try_ntrees
 colnames(cv_AUC_a) = try_depths
-```
 
-```{r}
-# Results are presented in the next chunk
-tic("GBM_A CV")
-for (n in try_ntrees){
-  AUC.ave <- NULL;
-    for (d in try_depths){
-    AUC <- NULL; i=1
-    for(fold in folds_a){
-      print(paste(n,d,i)); i=i+1
-      ## GBM
-      set.seed(1)
-      mod = gbm(h1n1_vaccine~., data=train_a[-fold, ],
-                n.trees=n, interaction.depth=d, 
-                n.minobsinnode=10, shrinkage=0.1, 
-                distribution="bernoulli", verbose=F)
-      
-      ## Predicting in the validation set
-      pred = predict(mod, newdata=train_a[fold, ], type="response")
-      # print(sum(is.na(pred)))
-      pred = factor(ifelse(pred>0.5, 1, 0))
-      
-      
-      ## AUC
-      obs = train_a[fold, ]$h1n1_vaccine
-      ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
-      auc <- performance(ROCPred, measure = "auc")
-      auc <- auc@y.values[[1]]
-      
-      AUC = c(AUC, auc)
-      
-      ## Freeing Memory
-      rm(mod); gc()
-    }
-    print(mean(AUC))
-    AUC.ave = c(AUC.ave, mean(AUC));
-    }
-  cv_AUC_a[paste(n), ] = AUC.ave
-  print(cv_AUC_a[paste(n), ])
-}
-toc()
-```
-
-```{r}
 cv_AUC_b <- NULL
 cv_AUC_b <- matrix(nrow = length(try_ntrees), ncol = length(try_depths))
 rownames(cv_AUC_b) = try_ntrees
 colnames(cv_AUC_b) = try_depths
-```
 
-```{r}
-# Results are presented in the next chunk
-tic("GBM_B CV")
-for (n in try_ntrees){
-  AUC.ave <- NULL;
-    for (d in try_depths){
-    AUC <- NULL; i=1
-    for(fold in folds_b){
-      print(paste(n,d,i)); i=i+1
-      ## GBM
-      set.seed(1)
-      mod = gbm(seasonal_vaccine~., data=train_b[-fold, ],
-                n.trees=n, interaction.depth=d, 
-                n.minobsinnode=10, shrinkage=0.1, 
-                distribution="bernoulli", verbose=F)
-      
-      ## Predicting in the validation set
-      pred = predict(mod, newdata=train_b[fold, ], type="response")
-      # print(sum(is.na(pred)))
-      pred = factor(ifelse(pred>0.5, 1, 0))
-      
-      
-      ## AUC
-      obs = train_b[fold, ]$seasonal_vaccine
-      ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
-      auc <- performance(ROCPred, measure = "auc")
-      auc <- auc@y.values[[1]]
-      
-      AUC = c(AUC, auc)
-      
-      ## Freeing Memory
-      rm(mod); gc()
-    }
-    print(mean(AUC))
-    AUC.ave = c(AUC.ave, mean(AUC));
-    }
-  cv_AUC_b[paste(n), ] = AUC.ave
-  print(cv_AUC_b[paste(n), ])
-}
-toc()
+# Hasil cross validation tertera pada chunk berikutnya 
+# dikarenakan memerlukan waktu yang lama untuk mengeksekusi kode.
+
+# tic("GBM_A CV")
+# for (n in try_ntrees){
+#   AUC.ave <- NULL;
+#     for (d in try_depths){
+#     AUC <- NULL; i=1
+#     for(fold in folds_a){
+#       print(paste(n,d,i)); i=i+1
+#       ## GBM
+#       set.seed(1)
+#       mod = gbm(h1n1_vaccine~., data=train_a[-fold, ],
+#                 n.trees=n, interaction.depth=d, 
+#                 n.minobsinnode=10, shrinkage=0.1, 
+#                 distribution="bernoulli", verbose=F)
+#       
+#       ## Predicting in the validation set
+#       pred = predict(mod, newdata=train_a[fold, ], type="response")
+#       # print(sum(is.na(pred)))
+#       pred = factor(ifelse(pred>0.5, 1, 0))
+#       
+#       
+#       ## AUC
+#       obs = train_a[fold, ]$h1n1_vaccine
+#       ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
+#       auc <- performance(ROCPred, measure = "auc")
+#       auc <- auc@y.values[[1]]
+#       
+#       AUC = c(AUC, auc)
+#       
+#       ## Freeing Memory
+#       rm(mod); gc()
+#     }
+#     print(mean(AUC))
+#     AUC.ave = c(AUC.ave, mean(AUC));
+#     }
+#   cv_AUC_a[paste(n), ] = AUC.ave
+#   print(cv_AUC_a[paste(n), ])
+# }
+# toc()
+# 
+# tic("GBM_B CV")
+# for (n in try_ntrees){
+#   AUC.ave <- NULL;
+#     for (d in try_depths){
+#     AUC <- NULL; i=1
+#     for(fold in folds_b){
+#       print(paste(n,d,i)); i=i+1
+#       ## GBM
+#       set.seed(1)
+#       mod = gbm(seasonal_vaccine~., data=train_b[-fold, ],
+#                 n.trees=n, interaction.depth=d, 
+#                 n.minobsinnode=10, shrinkage=0.1, 
+#                 distribution="bernoulli", verbose=F)
+#       
+#       ## Predicting in the validation set
+#       pred = predict(mod, newdata=train_b[fold, ], type="response")
+#       # print(sum(is.na(pred)))
+#       pred = factor(ifelse(pred>0.5, 1, 0))
+#       
+#       
+#       ## AUC
+#       obs = train_b[fold, ]$seasonal_vaccine
+#       ROCPred <- prediction(as.numeric(pred), as.numeric(obs))
+#       auc <- performance(ROCPred, measure = "auc")
+#       auc <- auc@y.values[[1]]
+#       
+#       AUC = c(AUC, auc)
+#       
+#       ## Freeing Memory
+#       rm(mod); gc()
+#     }
+#     print(mean(AUC))
+#     AUC.ave = c(AUC.ave, mean(AUC));
+#     }
+#   cv_AUC_b[paste(n), ] = AUC.ave
+#   print(cv_AUC_b[paste(n), ])
+# }
+# toc()
 ```
 
 ```{r}
@@ -519,9 +521,10 @@ cv_AUC_b$Var2 = as.factor(cv_AUC_b$Var2)
 ```
 
 #### Pemilihan Parameter
+
 ```{r}
 ggplot(cv_AUC_a, aes(x = Var2, y = value)) + 
-  geom_line(aes(color = Var1, group = Var1)) + 
+  geom_line(aes(color = Var1, group = Var1), size=2) + 
   geom_point()+
   ggtitle("Parameter vs AUC (Model A)") +
   theme(plot.title = element_text(hjust = 0.5)) +
@@ -530,14 +533,15 @@ ggplot(cv_AUC_a, aes(x = Var2, y = value)) +
 
 ```{r}
 ggplot(cv_AUC_b, aes(x = Var2, y = value)) + 
-  geom_line(aes(color = Var1, group = Var1)) + 
+  geom_line(aes(color = Var1, group = Var1), size=2) + 
   geom_point()+
   ggtitle("Parameter vs AUC (Model B)") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(x = "depth", y = "AUC", color = "ntree")
 ```
 
-Tujuan pemodelan merupakan membuat model yang tidak rumit (simple). Terlihat juga bahwa dengan ntree=200 dan mtry=13 yang secara relatif kecil, diperoleh AUC yang tinggi dibandingkan kombinasi parameter lainnya. Maka, akan digunakan parameter berikut.
+Tujuan pemodelan merupakan membuat model yang tidak rumit (simple). Maka, akan digunakan parameter berikut.
+
 ```{r}
 ntree_a = 150
 depth_a = 13
@@ -545,8 +549,8 @@ ntree_b = 100
 depth_b = 15
 ```
 
-
 ### Model A
+
 ```{r}
 set.seed(1)
 gbm_a = gbm(h1n1_vaccine~., data=train_a,
@@ -565,6 +569,7 @@ gbmPredict_a = ifelse(gbmPredict_a > 0.5, 1, 0)
 ```
 
 ### Model B
+
 ```{r}
 set.seed(1)
 gbm_b = gbm(seasonal_vaccine~., data=train_b,
@@ -578,6 +583,14 @@ gbmPredict_b = predict(gbm_b, type="response", newdata=testloc_b)
 gbmPredict_b = ifelse(gbmPredict_b > 0.5, 1, 0)
 ```
 
+```{r}
+(imp_gbm_b <- summary(gbm_b))
+```
+
+```{r}
+# write.csv(head(imp_gbm_a),"imp_gbm_a.csv", row.names = FALSE)
+# write.csv(head(imp_gbm_b),"imp_gbm_b.csv", row.names = FALSE)
+```
 
 ### Prediction
 
@@ -603,14 +616,13 @@ head(submission)
 ```
 
 ```{r}
-write.csv(submission,"submission_gbm.csv", row.names = FALSE)
+# write.csv(submission,"submission_gbm.csv", row.names = FALSE)
 ```
-
 
 # Hasil Akhir
-```{r}
-data.frame("Model"=c("Regresi Logistic", "Naive Bayes", "GBM"), 
-           "AUC Validasi Lokal" = round(c(logrAUC, nbAUC, gbmAUC),4),
-           "AUC Pengumpulan" = c(0.8505, 0.7943, 0.8548))
-```
 
+```{r}
+data.frame("Model"=c("Regresi Logistik", "Naive Bayes", "GBM"), 
+           "AUC Validasi Lokal" = round(c(logrAUC, nbAUC, gbmAUC),4),
+           "AUC Pengumpulan" = c(0.8505, 0.7973, 0.8548))
+```
