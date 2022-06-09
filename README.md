@@ -1,6 +1,8 @@
 # DrivenData_FluShotLearning
 Flu Shot Learning: Predicting H1N1 and Seasonal Flu Vaccines - [HOSTED BY DRIVENDATA](https://www.drivendata.org/competitions/66/flu-shot-learning/)
 
+Predicting H1N1 and Seasonal Flu vaccine acceptance based on individual personal traits and variables. Each row in the dataset represents one person who responded to the National 2009 H1N1 Flu Survey.
+
 Programmed in R Markdown. Achieved top 11% out of 4000+ participants.
 
 Implemented machine learning algorithms which comprises of:
