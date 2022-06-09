@@ -3,7 +3,7 @@ Flu Shot Learning: Predicting H1N1 and Seasonal Flu Vaccines - [HOSTED BY DRIVEN
 
 Achieved top 12% in the leaderboard worldwide.
 
-Implemented machine learning algorithms comprises of:
+Implemented machine learning algorithms which comprises of:
 1. Logistic Regression, 
 2. Naive Bayes, and
 3. Gradient Boosting Machine.
