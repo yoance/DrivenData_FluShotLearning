@@ -1,7 +1,7 @@
 # DrivenData_FluShotLearning
 Flu Shot Learning: Predicting H1N1 and Seasonal Flu Vaccines - [HOSTED BY DRIVENDATA](https://www.drivendata.org/competitions/66/flu-shot-learning/)
 
-Programmed in R Markdown. Achieved top 12% in the leaderboard worldwide.
+Programmed in R Markdown. Achieved top 11% out of 4000+ participants.
 
 Implemented machine learning algorithms which comprises of:
 1. Logistic Regression, 
