@@ -10,7 +10,7 @@ Implemented machine learning algorithms which comprises of:
 2. Naive Bayes, and
 3. Gradient Boosting Machine.
 
-Included in the projects are 
+Included in the project are 
 - exploratory data analysis, 
 - preprocessing, 
 - feature selection using statistical methods, 
