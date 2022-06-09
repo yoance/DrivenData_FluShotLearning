@@ -14,4 +14,4 @@ Included in the projects are
 - model evaluation, and
 - results presentation and comparison
 
-[Paper Link (in Bahasa Indonesia)]([https://www.google.com](https://drive.google.com/file/d/1FbOG6kAbDrj7vgiMIPeCCXPla2WvrX1n/view?usp=sharing))
+## [Paper Link (in Bahasa Indonesia)](https://drive.google.com/file/d/1FbOG6kAbDrj7vgiMIPeCCXPla2WvrX1n/view?usp=sharing)
